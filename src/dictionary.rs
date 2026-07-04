@@ -32,3 +32,18 @@ pub fn load_passwords_from_file(path: &Path) -> Vec<String> {
 
     passwords
 }
+
+/// 从二进制内嵌的 password_list.txt 加载密码列表（编译时嵌入，无需外部文件）
+pub fn load_embedded_passwords() -> Vec<String> {
+    let content = include_str!("../password_list.txt");
+    let mut passwords: Vec<String> = content
+        .lines()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    passwords.sort();
+    passwords.dedup();
+
+    passwords
+}

@@ -1,6 +1,7 @@
+use std::io::{self, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use rayon::prelude::*;
@@ -8,8 +9,47 @@ use rayon::prelude::*;
 use crate::password::check_password;
 use crate::style;
 
-/// 打印彩色进度信息
-fn print_progress(count: usize, total: u64, start_time: Instant, current: &str) {
+/// 打印视觉进度条（使用 \r 覆盖同一行）
+fn print_progress_bar(count: usize, total: u64, start_time: Instant, current: &str) {
+    let elapsed = start_time.elapsed().as_secs_f64();
+    let rate = if elapsed > 0.0 {
+        count as f64 / elapsed
+    } else {
+        0.0
+    };
+    let pct = if total > 0 {
+        count as f64 / total as f64 * 100.0
+    } else {
+        0.0
+    };
+
+    // 视觉进度条: [████████░░░░░░░░░░░░]
+    const BAR_WIDTH: usize = 22;
+    let filled = ((pct / 100.0) * BAR_WIDTH as f64).round() as usize;
+    let empty = BAR_WIDTH.saturating_sub(filled);
+    let bar: String = "█".repeat(filled) + &"░".repeat(empty);
+
+    // 当前密码截断显示
+    let display = if current.len() > 18 {
+        format!("{}...", &current[..18])
+    } else {
+        format!("{:22}", current)
+    };
+
+    print!(
+        "\r    [{}] {:>6.2}% | {:>8}/{} | {:>8.0}/秒 | {}",
+        bar,
+        pct,
+        style::progress_num(&count.to_string()),
+        total,
+        rate,
+        style::value(&display)
+    );
+    io::stdout().flush().unwrap();
+}
+
+/// 打印纯文本进度信息（用于数字暴力破解阶段，含换行）
+fn print_progress_line(count: usize, total: u64, start_time: Instant, current: &str) {
     let elapsed = start_time.elapsed().as_secs_f64();
     let rate = if elapsed > 0.0 {
         count as f64 / elapsed
@@ -92,7 +132,7 @@ pub fn numeric_bruteforce(
                 let count = counter.fetch_add(1, Ordering::Relaxed) + 1;
 
                 if count % 100_000 == 0 || count == 1 {
-                    print_progress(count, total_combinations, start_time, &pwd);
+                    print_progress_line(count, total_combinations, start_time, &pwd);
                 }
 
                 if correct {
@@ -117,7 +157,7 @@ pub fn numeric_bruteforce(
     })
 }
 
-/// 使用给定的密码列表进行字典攻击
+/// 使用给定的密码列表进行字典攻击（带视觉进度条）
 pub fn dictionary_attack(
     file_path: &Path,
     passwords: &[String],
@@ -138,6 +178,7 @@ pub fn dictionary_attack(
 
     let file_buf = file_path.to_path_buf();
     let total = passwords.len() as u64;
+    let progress_lock = Arc::new(Mutex::new(()));
 
     // 创建独立的线程池
     let pool = rayon::ThreadPoolBuilder::new()
@@ -154,16 +195,18 @@ pub fn dictionary_attack(
             let correct = check_password(&file_buf, pwd);
             let count = counter.fetch_add(1, Ordering::Relaxed) + 1;
 
-            if count % 10_000 == 0 || count == 1 {
-                let display = if pwd.len() > 20 {
-                    format!("{}...", &pwd[..20])
+            if count % 1000 == 0 || count == 1 {
+                let display = if pwd.len() > 18 {
+                    format!("{}...", &pwd[..18])
                 } else {
                     pwd.to_string()
                 };
-                print_progress(count, total, start_time, &display);
+                let _guard = progress_lock.lock().unwrap();
+                print_progress_bar(count, total, start_time, &display);
             }
 
             if correct {
+                let _guard = progress_lock.lock().unwrap();
                 println!();
                 println!("  {} 找到密码: [{}]",
                     style::success("✔"),
@@ -174,6 +217,10 @@ pub fn dictionary_attack(
 
             correct
         });
+
+        // 结束进度条（换行）
+        let _guard = progress_lock.lock().unwrap();
+        println!();
 
         result.cloned()
     })
