@@ -6,8 +6,9 @@ use std::time::Instant;
 use rayon::prelude::*;
 
 use crate::password::check_password;
+use crate::style;
 
-/// 打印进度信息
+/// 打印彩色进度信息
 fn print_progress(count: usize, total: u64, start_time: Instant, current: &str) {
     let elapsed = start_time.elapsed().as_secs_f64();
     let rate = if elapsed > 0.0 {
@@ -17,8 +18,17 @@ fn print_progress(count: usize, total: u64, start_time: Instant, current: &str) 
     };
     let progress = (count as f64 / total as f64) * 100.0;
     println!(
-        "    进度: {:6.2}% | 已尝试: {:>8} | 速度: {:>8.0}/秒 | 用时: {:>6.1}秒 | 当前: {}",
-        progress, count, rate, elapsed, current
+        "    {} {:>6.2}% | {} {:>8} | {} {:>8.0}/秒 | {} {:>6.1}秒 | {} {}",
+        style::progress_num("进度:"),
+        progress,
+        style::progress_num("已尝试:"),
+        count,
+        style::progress_num("速度:"),
+        rate,
+        style::progress_num("用时:"),
+        elapsed,
+        style::value("当前:"),
+        current
     );
 }
 
@@ -35,8 +45,11 @@ pub fn numeric_bruteforce(
     let file_buf = file_path.to_path_buf();
     let total_combinations: u64 = 1_111_110;
 
-    println!("━━━ 阶段1: 数字暴力破解 (1-6位) ━━━");
-    println!("  共计 {} 种组合", total_combinations);
+    println!("{}", style::stage("━━━ 🔢 阶段1: 数字暴力破解 (1-6位) ━━━"));
+    println!("  {} {} 种组合",
+        style::value("共计"),
+        style::progress_num(&total_combinations.to_string())
+    );
 
     // 创建独立的线程池用于此阶段
     let pool = rayon::ThreadPoolBuilder::new()
@@ -59,11 +72,12 @@ pub fn numeric_bruteforce(
             let range_size = end - start;
 
             println!(
-                "  → [{}-位数字] 范围: {:0width$}-{:0width$} ({}种)",
+                "  {} [{}-位数字] 范围: {:0width$}-{:0width$} ({}种)",
+                style::value("→"),
                 len,
                 start,
                 end - 1,
-                range_size,
+                style::progress_num(&range_size.to_string()),
                 width = len as usize
             );
 
@@ -82,7 +96,11 @@ pub fn numeric_bruteforce(
                 }
 
                 if correct {
-                    println!("\n  ✓ 找到密码: [{}]", pwd);
+                    println!();
+                    println!("  {} 找到密码: [{}]",
+                        style::success("✔"),
+                        style::found_password(&pwd)
+                    );
                     found.store(true, Ordering::Relaxed);
                 }
 
@@ -109,11 +127,14 @@ pub fn dictionary_attack(
     num_threads: usize,
 ) -> Option<String> {
     if passwords.is_empty() {
-        println!("  ℹ  字典为空，跳过");
+        println!("  {} 字典为空，跳过", style::warning("⚠"));
         return None;
     }
 
-    println!("  → 字典大小: {} 个唯一密码", passwords.len());
+    println!("  {} 字典大小: {} 个唯一密码",
+        style::value("→"),
+        style::progress_num(&passwords.len().to_string())
+    );
 
     let file_buf = file_path.to_path_buf();
     let total = passwords.len() as u64;
@@ -143,7 +164,11 @@ pub fn dictionary_attack(
             }
 
             if correct {
-                println!("\n  ✓ 找到密码: [{}]", pwd);
+                println!();
+                println!("  {} 找到密码: [{}]",
+                    style::success("✔"),
+                    style::found_password(pwd)
+                );
                 found.store(true, Ordering::Relaxed);
             }
 

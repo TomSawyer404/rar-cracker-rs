@@ -2,6 +2,7 @@ mod cli;
 mod cracker;
 mod dictionary;
 mod password;
+mod style;
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -15,17 +16,21 @@ use crate::cracker::{dictionary_attack, numeric_bruteforce};
 use crate::dictionary::load_passwords_from_file;
 
 fn main() {
-    println!("╔══════════════════════════════════════╗");
-    println!("║        RAR 密码破解工具 v1.0.0        ║");
-    println!("╚══════════════════════════════════════╝");
-    println!();
-
-    // ---- 解析 CLI 参数 ----
+    // ---- 解析 CLI 参数（优先执行，--help/--version 时直接退出） ----
     let args = Cli::parse();
+
+    // ── 启动横幅 ──
+    println!("{}", style::banner("╔══════════════════════════════════════╗"));
+    println!("{}", style::banner(&format!("║        RAR 密码破解工具 v{}        ║", env!("CARGO_PKG_VERSION"))));
+    println!("{}", style::banner("╚══════════════════════════════════════╝"));
+    println!();
 
     // 检查RAR文件是否存在
     if !args.file.exists() {
-        eprintln!("错误: RAR文件 '{}' 不存在", args.file.display());
+        eprintln!("{} {}",
+            style::error("✖ 错误:"),
+            style::highlight(&format!("RAR文件 '{}' 不存在", args.file.display()))
+        );
         std::process::exit(1);
     }
 
@@ -38,8 +43,8 @@ fn main() {
         args.threads
     };
 
-    println!("📂 目标文件: {}", args.file.display());
-    println!("⚙  线程数:   {}", num_threads);
+    println!("📂 {}  {}", style::value("目标文件:"), args.file.display());
+    println!("⚙  {}  {}", style::value("线程数:"), num_threads);
     println!();
 
     // 共享状态
@@ -60,7 +65,8 @@ fn main() {
     let found_password = found_password.or_else(|| {
         let dict_path = args.dictionary.as_ref()?;
         if dict_path.exists() {
-            println!("\n━━━ 阶段2: 字典文件破解 ━━━");
+            println!();
+            println!("{}", style::stage("━━━ 📖 阶段2: 字典文件破解 ━━━"));
             let passwords = load_passwords_from_file(dict_path);
             dictionary_attack(
                 &args.file,
@@ -71,7 +77,10 @@ fn main() {
                 num_threads,
             )
         } else {
-            eprintln!("警告: 字典文件 '{}' 不存在", dict_path.display());
+            eprintln!("{} {}",
+                style::warning("⚠ 警告:"),
+                format!("字典文件 '{}' 不存在", dict_path.display())
+            );
             None
         }
     });
@@ -80,8 +89,9 @@ fn main() {
     let found_password = found_password.or_else(|| {
         let dir_path = args.dictionary_dir.as_ref()?;
         if dir_path.is_dir() {
-            println!("\n━━━ 阶段3: 字典目录破解 ━━━");
-            println!("  扫描目录: {}", dir_path.display());
+            println!();
+            println!("{}", style::stage("━━━ 📁 阶段3: 字典目录破解 ━━━"));
+            println!("  {}", style::value(&format!("扫描目录: {}", dir_path.display())));
 
             // 收集目录中的所有文件
             let dict_files: Vec<_> = WalkDir::new(dir_path)
@@ -93,18 +103,22 @@ fn main() {
                 .collect();
 
             if dict_files.is_empty() {
-                println!("  ℹ  目录中没有文件");
+                println!("  {} 目录中没有文件", style::warning("⚠"));
                 return None;
             }
 
-            println!("  发现 {} 个字典文件", dict_files.len());
+            println!("  {} 发现 {} 个字典文件",
+                style::value("🔍"),
+                style::progress_num(&dict_files.len().to_string())
+            );
 
             for dict_file in &dict_files {
                 if found.load(Ordering::Relaxed) {
                     break;
                 }
 
-                println!("\n  📄 处理字典: {}", dict_file.display());
+                println!();
+                println!("  📄 处理字典: {}", style::highlight(&dict_file.display().to_string()));
                 let passwords = load_passwords_from_file(dict_file);
                 let pwd = dictionary_attack(
                     &args.file,
@@ -122,37 +136,42 @@ fn main() {
 
             None
         } else {
-            eprintln!("警告: 字典目录 '{}' 不存在或不是一个目录", dir_path.display());
+            eprintln!("{} {}",
+                style::warning("⚠ 警告:"),
+                format!("字典目录 '{}' 不存在或不是一个目录", dir_path.display())
+            );
             None
         }
     });
 
     // ---- 输出最终结果 ----
     println!();
-    println!("════════════════════════════════════════");
+    println!("{}", style::banner("════════════════════════════════════════"));
     let elapsed = start_time.elapsed();
     let total_attempts = counter.load(Ordering::Relaxed);
 
     match found_password {
         Some(pwd) => {
-            println!("✅  破解成功!");
-            println!("  文件:     {}", args.file.display());
-            println!("  密码:     [{}]", pwd);
-            println!("  用时:     {:.2} 秒", elapsed.as_secs_f64());
-            println!("  尝试次数: {}", total_attempts);
-            println!("  速度:     {:.0} 次/秒",
+            println!("{}  {}", style::success("✅  破解成功!"), style::found_password(&pwd));
+            println!("  📂 {}  {}", style::value("文件:"), args.file.display());
+            println!("  🔑 {}  {}", style::value("密码:"), style::found_password(&pwd));
+            println!("  ⏱ {}  {:.2} 秒", style::value("用时:"), elapsed.as_secs_f64());
+            println!("  🔢 {}  {}", style::value("尝试次数:"), total_attempts);
+            println!("  🚀 {}  {:.0} 次/秒",
+                style::value("速度:"),
                 total_attempts as f64 / elapsed.as_secs_f64()
             );
         }
         None => {
-            println!("❌  破解失败");
-            println!("  文件:     {}", args.file.display());
-            println!("  用时:     {:.2} 秒", elapsed.as_secs_f64());
-            println!("  尝试次数: {}", total_attempts);
-            println!("  建议: 尝试以下方法");
-            println!("        1. 使用更大的字典文件");
-            println!("        2. 增加密码长度范围");
-            println!("        3. 使用混合字符集字典");
+            println!("{}", style::error("❌  破解失败"));
+            println!("  📂 {}  {}", style::value("文件:"), args.file.display());
+            println!("  ⏱ {}  {:.2} 秒", style::value("用时:"), elapsed.as_secs_f64());
+            println!("  🔢 {}  {}", style::value("尝试次数:"), total_attempts);
+            println!();
+            println!("  💡 {}", style::warning("建议: 尝试以下方法"));
+            println!("     {}", style::value("1. 使用更大的字典文件"));
+            println!("     {}", style::value("2. 增加密码长度范围"));
+            println!("     {}", style::value("3. 使用混合字符集字典"));
         }
     }
 }

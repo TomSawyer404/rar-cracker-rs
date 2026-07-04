@@ -1,6 +1,6 @@
 [package]
 name = "rar-cracker-rs"
-version = "1.0.0"
+version = "0.0.2"
 edition = "2024"
 description = "RAR file password brute-force cracking tool"
 
@@ -9,3 +9,4 @@ clap = { version = "4", features = ["derive"] }
 rayon = "1"
 unrar = "0.5"
 walkdir = "2"
+colored = "3"

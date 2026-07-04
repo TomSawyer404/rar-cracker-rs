@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use unrar::Archive;
 
+use crate::style;
+
 /// 嵌入到二进制中的 UnRAR.exe（Windows 专用）
 /// 编译时会自动将项目根目录的 UnRAR.exe 打包进 .exe
 #[cfg(target_os = "windows")]
@@ -75,16 +77,17 @@ fn resolve_unrar_exe() -> PathBuf {
     // 所有方式均失败（非 Windows 且未安装 unrar）
     #[cfg(not(target_os = "windows"))]
     {
+        eprintln!("{}", style::error("✖ 错误: 未找到 unrar 命令。"));
         if cfg!(target_os = "linux") {
-            eprintln!("  错误: 未找到 unrar 命令。请在终端执行:");
+            eprintln!("  {}", style::value("请在终端执行:"));
             eprintln!("    sudo apt install unrar  (Ubuntu/Debian)");
             eprintln!("    sudo yum install unrar  (CentOS/RHEL)");
             eprintln!("    sudo pacman -S unrar    (Arch Linux)");
         } else if cfg!(target_os = "macos") {
-            eprintln!("  错误: 未找到 unrar 命令。请先安装 Homebrew (https://brew.sh)，然后执行:");
+            eprintln!("  {}", style::value("请先安装 Homebrew (https://brew.sh)，然后执行:"));
             eprintln!("    brew install unrar");
         } else {
-            eprintln!("  错误: 未找到 unrar 命令。请先安装 unrar 命令行工具。");
+            eprintln!("  {}", style::value("请先安装 unrar 命令行工具。"));
         }
         std::process::exit(1);
     }
@@ -106,7 +109,11 @@ pub fn verify_with_unrar(file_path: &Path, password: &str) -> bool {
     {
         Ok(output) => output.status.success(),
         Err(e) => {
-            eprintln!("     错误: 无法执行 UnRAR ({}): {}", exe.display(), e);
+            eprintln!("  {} 无法执行 UnRAR ({}): {}",
+                style::error("✖"),
+                exe.display(),
+                e
+            );
             false
         }
     }

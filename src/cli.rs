@@ -1,5 +1,16 @@
+use clap::builder::styling::{AnsiColor, Styles};
 use clap::Parser;
 use std::path::PathBuf;
+
+/// 自定义 clap 帮助信息样式
+const CLAP_STYLES: Styles = Styles::styled()
+    .header(AnsiColor::BrightCyan.on_default().bold())
+    .usage(AnsiColor::BrightCyan.on_default().bold())
+    .literal(AnsiColor::BrightGreen.on_default().bold())
+    .placeholder(AnsiColor::Yellow.on_default())
+    .error(AnsiColor::Red.on_default().bold())
+    .valid(AnsiColor::BrightGreen.on_default().bold())
+    .invalid(AnsiColor::Red.on_default().bold());
 
 /// RAR文件密码暴力破解工具
 ///
@@ -7,8 +18,9 @@ use std::path::PathBuf;
 #[derive(Parser)]
 #[command(
     name = "rar-cracker",
-    version = "1.0.0",
-    about = "RAR文件密码暴力破解工具"
+    version = env!("CARGO_PKG_VERSION"),
+    about = "RAR文件密码暴力破解工具",
+    styles = CLAP_STYLES
 )]
 pub struct Cli {
     /// RAR文件路径（必填）
