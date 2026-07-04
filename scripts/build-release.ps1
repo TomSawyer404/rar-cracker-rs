@@ -11,8 +11,9 @@ Linux 用户请直接在 Linux 环境下自行编译。
 #>
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$Version = (& cargo metadata --format-version 1 --no-deps |
-    ConvertFrom-Json).packages[0].version
+$Metadata = (& cargo metadata --format-version 1 --no-deps | ConvertFrom-Json)
+$PackageName = $Metadata.packages[0].name
+$Version = $Metadata.packages[0].version
 $DistDir = "$ProjectRoot\dist"
 
 # 清空旧的发布目录
@@ -20,7 +21,7 @@ if (Test-Path $DistDir) { Remove-Item $DistDir -Recurse -Force }
 New-Item -ItemType Directory -Path $DistDir | Out-Null
 
 Write-Host "══════════════════════════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "  rar-cracker v$Version  Windows Release Build" -ForegroundColor Cyan
+Write-Host "  $PackageName v$Version  Windows Release Build" -ForegroundColor Cyan
 Write-Host "══════════════════════════════════════════════════════════════════════════" -ForegroundColor Cyan
 Write-Host ""
 
@@ -35,8 +36,8 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-$Src = "$ProjectRoot\target\$Target\release\rar-cracker-rs.exe"
-$Dst = "$DistDir\rar-cracker_v$Version`_$Target.exe"
+$Src = "$ProjectRoot\target\$Target\release\$PackageName.exe"
+$Dst = "$DistDir\${PackageName}_v${Version}_${Target}.exe"
 Copy-Item $Src $Dst
 Write-Host "  ✔ $Dst" -ForegroundColor Green
 Write-Host ""
