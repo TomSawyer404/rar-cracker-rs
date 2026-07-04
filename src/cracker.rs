@@ -48,33 +48,9 @@ fn print_progress_bar(count: usize, total: u64, start_time: Instant, current: &s
     io::stdout().flush().unwrap();
 }
 
-/// 打印纯文本进度信息（用于数字暴力破解阶段，含换行）
-fn print_progress_line(count: usize, total: u64, start_time: Instant, current: &str) {
-    let elapsed = start_time.elapsed().as_secs_f64();
-    let rate = if elapsed > 0.0 {
-        count as f64 / elapsed
-    } else {
-        0.0
-    };
-    let progress = (count as f64 / total as f64) * 100.0;
-    println!(
-        "    {} {:>6.2}% | {} {:>8} | {} {:>8.0}/秒 | {} {:>6.1}秒 | {} {}",
-        style::progress_num("进度:"),
-        progress,
-        style::progress_num("已尝试:"),
-        count,
-        style::progress_num("速度:"),
-        rate,
-        style::progress_num("用时:"),
-        elapsed,
-        style::value("当前:"),
-        current
-    );
-}
-
-/// 尝试所有1-6位数字组合
+/// 尝试所有4位数字组合（0000-9999）
 ///
-/// 总计: 10 + 100 + 1,000 + 10,000 + 100,000 + 1,000,000 = 1,111,110 种组合
+/// 总计: 10,000 种组合
 pub fn numeric_bruteforce(
     file_path: &Path,
     found: &Arc<AtomicBool>,
@@ -83,10 +59,12 @@ pub fn numeric_bruteforce(
     num_threads: usize,
 ) -> Option<String> {
     let file_buf = file_path.to_path_buf();
-    let total_combinations: u64 = 1_111_110;
+    let total_combinations: u64 = 10_000;
+    let progress_lock = Arc::new(Mutex::new(()));
+    let local_counter = Arc::new(AtomicUsize::new(0));
 
-    println!("{}", style::stage("━━━ 🔢 阶段1: 数字暴力破解 (1-6位) ━━━"));
-    println!("  {} {} 种组合",
+    println!("{}", style::stage("━━━ 🔢 阶段1: 数字暴力破解 (4位) ━━━"));
+    println!("  {} {} 种组合 (0000-9999)",
         style::value("共计"),
         style::progress_num(&total_combinations.to_string())
     );
@@ -98,62 +76,48 @@ pub fn numeric_bruteforce(
         .expect("无法创建线程池");
 
     pool.install(|| {
-        for len in 1..=6 {
+        let start = 0u64;
+        let end = 10_000u64;
+
+        let found_in_len = (start..end).into_par_iter().find_any(|&i| {
             if found.load(Ordering::Relaxed) {
-                return None;
+                return true;
             }
 
-            let start = if len == 1 {
-                0
-            } else {
-                10u64.pow(len as u32 - 1)
-            };
-            let end = 10u64.pow(len as u32);
-            let range_size = end - start;
+            let pwd = format!("{:04}", i);
+            let correct = check_password(&file_buf, &pwd);
 
-            println!(
-                "  {} [{}-位数字] 范围: {:0width$}-{:0width$} ({}种)",
-                style::value("→"),
-                len,
-                start,
-                end - 1,
-                style::progress_num(&range_size.to_string()),
-                width = len as usize
-            );
+            counter.fetch_add(1, Ordering::Relaxed);
+            let local_count = local_counter.fetch_add(1, Ordering::Relaxed) + 1;
 
-            let found_in_len = (start..end).into_par_iter().find_any(|&i| {
-                if found.load(Ordering::Relaxed) {
-                    return true;
-                }
-
-                let pwd = format!("{:0width$}", i, width = len as usize);
-                let correct = check_password(&file_buf, &pwd);
-
-                let count = counter.fetch_add(1, Ordering::Relaxed) + 1;
-
-                if count % 100_000 == 0 || count == 1 {
-                    print_progress_line(count, total_combinations, start_time, &pwd);
-                }
-
-                if correct {
-                    println!();
-                    println!("  {} 找到密码: [{}]",
-                        style::success("✔"),
-                        style::found_password(&pwd)
-                    );
-                    found.store(true, Ordering::Relaxed);
-                }
-
-                correct
-            });
-
-            if let Some(i) = found_in_len {
-                let pwd = format!("{:0width$}", i, width = len as usize);
-                return Some(pwd);
+            if local_count % 100 == 0 || local_count == 1 {
+                let _guard = progress_lock.lock().unwrap();
+                print_progress_bar(local_count, total_combinations, start_time, &pwd);
             }
+
+            if correct {
+                let _guard = progress_lock.lock().unwrap();
+                println!();
+                println!("  {} 找到密码: [{}]",
+                    style::success("✔"),
+                    style::found_password(&pwd)
+                );
+                found.store(true, Ordering::Relaxed);
+            }
+
+            correct
+        });
+
+        // 结束进度条（换行）
+        let _guard = progress_lock.lock().unwrap();
+        println!();
+
+        if let Some(i) = found_in_len {
+            let pwd = format!("{:04}", i);
+            Some(pwd)
+        } else {
+            None
         }
-
-        None
     })
 }
 
@@ -179,6 +143,8 @@ pub fn dictionary_attack(
     let file_buf = file_path.to_path_buf();
     let total = passwords.len() as u64;
     let progress_lock = Arc::new(Mutex::new(()));
+    // 本地计数器：仅用于本阶段进度显示，不受全局 counter 影响
+    let local_counter = Arc::new(AtomicUsize::new(0));
 
     // 创建独立的线程池
     let pool = rayon::ThreadPoolBuilder::new()
@@ -193,16 +159,20 @@ pub fn dictionary_attack(
             }
 
             let correct = check_password(&file_buf, pwd);
-            let count = counter.fetch_add(1, Ordering::Relaxed) + 1;
 
-            if count % 1000 == 0 || count == 1 {
+            // 全局计数（最终统计用）
+            counter.fetch_add(1, Ordering::Relaxed);
+            // 本地计数（本阶段进度条用）
+            let local_count = local_counter.fetch_add(1, Ordering::Relaxed) + 1;
+
+            if local_count % 1000 == 0 || local_count == 1 {
                 let display = if pwd.len() > 18 {
                     format!("{}...", &pwd[..18])
                 } else {
                     pwd.to_string()
                 };
                 let _guard = progress_lock.lock().unwrap();
-                print_progress_bar(count, total, start_time, &display);
+                print_progress_bar(local_count, total, start_time, &display);
             }
 
             if correct {

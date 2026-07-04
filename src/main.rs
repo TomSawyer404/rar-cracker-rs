@@ -57,7 +57,7 @@ fn main() {
     let start_time = Instant::now();
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    //  阶段1: 数字暴力破解（始终执行）
+    //  阶段1: 4位数字暴力破解（始终执行，0000-9999）
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     let found_password = numeric_bruteforce(&args.file, &found, &counter, start_time, num_threads);
 
