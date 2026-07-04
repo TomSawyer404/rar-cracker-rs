@@ -19,6 +19,12 @@ const CLAP_STYLES: Styles = Styles::styled()
 #[command(
     name = "rar-cracker",
     version = env!("CARGO_PKG_VERSION"),
+    long_version = concat!(
+        env!("CARGO_PKG_VERSION"),
+        " (", env!("BUILD_TARGET"), ")",
+        " [commit ", env!("BUILD_COMMIT"), "]",
+        " built ", env!("BUILD_DATE"),
+    ),
     about = "RAR文件密码暴力破解工具",
     styles = CLAP_STYLES
 )]
