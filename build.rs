@@ -18,11 +18,14 @@ fn run(args: &[&str]) -> Option<String> {
 }
 
 fn main() {
-    // unrar_sys 编译 unrar C++ 源码时遗漏了部分 Windows 系统库的链接
-    println!("cargo:rustc-link-lib=advapi32");
-
-    // ── 目标三元组：x86_64-pc-windows-msvc / x86_64-unknown-linux-musl ──
+    // ── 目标三元组：x86_64-pc-windows-msvc / x86_64-unknown-linux-gnu ──
     let target = std::env::var("TARGET").unwrap_or_else(|_| "unknown".into());
+
+    // unrar_sys 编译 unrar C++ 源码时遗漏了 Windows 系统库的链接
+    // advapi32 是 Windows 专用，Linux/macOS 编译时跳过
+    if target.contains("windows") {
+        println!("cargo:rustc-link-lib=advapi32");
+    }
     println!("cargo:rustc-env=BUILD_TARGET={}", target);
 
     // ── Git 短提交哈希 ──
