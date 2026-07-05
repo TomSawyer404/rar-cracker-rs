@@ -47,10 +47,10 @@ cargo build --release
 ### 基本用法
 
 ```powershell
-# 使用内嵌字典自动破解
+# 使用内嵌字典 + 数字穷举自动破解（默认）
 .\rar-cracker-rs.exe encrypted.rar
 
-# 指定额外字典文件
+# 指定字典文件（跳过数字穷举和内嵌字典）
 .\rar-cracker-rs.exe encrypted.rar --dictionary rockyou.txt
 
 # 使用整个字典目录
@@ -65,15 +65,15 @@ cargo build --release
 | 参数 | 说明 |
 |------|------|
 | `<FILE>` | RAR 文件路径（必填） |
-| `-d`, `--dictionary <FILE>` | 额外的字典文件路径 |
-| `-D`, `--dictionary-dir <DIR>` | 字典目录路径（使用该目录下所有文件） |
+| `-d`, `--dictionary <FILE>` | 字典文件路径（指定后跳过数字穷举和内嵌字典） |
+| `-D`, `--dictionary-dir <DIR>` | 字典目录路径，使用该目录下所有文件（指定后跳过数字穷举和内嵌字典） |
 | `-t`, `--threads <N>` | 线程数，默认自动检测 CPU 核心数 |
 | `-h`, `--help` | 显示帮助信息 |
 | `-V`, `--version` | 显示版本信息 |
 
 ## 破解流程
 
-工具按以下阶段依次执行，任何阶段找到密码即停止：
+### 未指定字典参数（默认模式）
 
 ```
 阶段1: 🔢 4位数字暴力破解
@@ -84,12 +84,22 @@ cargo build --release
   → 自动使用 password_list.txt（约 6,070 个常用密码）
   → 带实时进度条
 
+失败提示: 💡 建议使用 --dictionary 指定更大的字典文件
+```
+
+### 指定了 `--dictionary` 或 `--dictionary-dir`
+
+```
+[跳过] 阶段1: 数字穷举
+[跳过] 阶段2: 内嵌字典
 阶段3: 📂 用户指定字典文件（--dictionary）
-  → 仅当提供了该参数时执行
+  → 或
 
 阶段4: 📁 用户指定字典目录（--dictionary-dir）
   → 遍历目录下所有文件作为字典
 ```
+
+> **设计意图**：用户主动提供字典说明心中有目标，不应该被内置的 1 万次数字穷举拖延时间，直接使用用户提供的字典更高效。
 
 ## 验证机制
 
@@ -120,7 +130,8 @@ rar-cracker-rs/
 │   ├── password.rs     # 密码验证：crate 扫描 + UnRAR 确认
 │   └── style.rs        # 终端彩色输出
 ├── scripts/
-│   └── build-release.ps1   # Windows 发布构建脚本
+│   ├── build-release.ps1   # Windows 发布构建脚本
+│   └── build-release.sh    # Linux 发布构建脚本
 ├── build.rs            # 构建时元信息注入（target、git commit、日期）
 ├── password_list.txt   # 内嵌字典（约 6070 个常用密码）
 ├── UnRAR.exe           # 内嵌的 UnRAR 命令行工具（Windows）
@@ -141,8 +152,19 @@ rar-cracker-rs/
 
 ### Linux / macOS
 
+使用发布脚本一键构建：
+
 ```bash
-# Linux 需先安装 unrar
+chmod +x scripts/build-release.sh
+./scripts/build-release.sh
+```
+
+输出到 `dist/` 目录，文件名为 `rar-cracker-rs_v<version>_x86_64-unknown-linux-gnu`。
+
+手动编译：
+
+```bash
+# 安装依赖
 sudo apt install unrar      # Ubuntu/Debian
 sudo yum install unrar      # CentOS/RHEL
 sudo pacman -S unrar        # Arch Linux
