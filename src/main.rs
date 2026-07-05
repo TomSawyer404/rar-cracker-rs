@@ -56,22 +56,32 @@ fn main() {
     let counter = Arc::new(AtomicUsize::new(0));
     let start_time = Instant::now();
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    //  阶段1: 4位数字暴力破解（始终执行，0000-9999）
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    let found_password = numeric_bruteforce(&args.file, &found, &counter, start_time, num_threads);
+    // 用户指定了字典参数 → 跳过数字穷举和内嵌字典，直接使用用户字典
+    let user_dict = args.dictionary.is_some() || args.dictionary_dir.is_some();
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    //  阶段2: 内嵌字典 password_list.txt（始终执行）
+    //  阶段1: 4位数字暴力破解（仅当用户未指定字典时执行）
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    let found_password = if !user_dict {
+        numeric_bruteforce(&args.file, &found, &counter, start_time, num_threads)
+    } else {
+        println!("  {} 用户指定了字典参数，跳过数字穷举", style::value("→"));
+        None
+    };
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  阶段2: 内嵌字典（仅当用户未指定字典时执行）
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     let found_password = found_password.or_else(|| {
+        if user_dict {
+            println!("  {} 用户指定了字典参数，跳过内嵌字典", style::value("→"));
+            return None;
+        }
         println!();
         println!("{}", style::stage("━━━ 📖 阶段2: 内嵌字典破解 ━━━"));
         println!("  {} 使用内嵌密码列表 (共 {} 条)",
             style::value("→"),
             style::progress_num(&{
-                // 先读取一次以获取数量
-                // 实际破解时会重新读取传入 dictionary_attack
                 let p = load_embedded_passwords();
                 p.len().to_string()
             })
@@ -190,19 +200,20 @@ fn main() {
             println!("  🔢 {}  {}", style::value("尝试次数:"), total_attempts);
             println!();
 
-            // 如果用户没有指定字典参数，提示使用 --dictionary
-            if args.dictionary.is_none() && args.dictionary_dir.is_none() {
+            // 根据用户是否指定字典，给出不同提示
+            if user_dict {
+                println!("  💡 {}", style::warning("用户提供的字典中未找到正确密码"));
+                println!("     {}", style::value("建议: 尝试以下方法"));
+                println!("     {}", style::value("1. 使用更大的字典文件"));
+                println!("     {}", style::value("2. 检查字典编码是否为 UTF-8"));
+                println!("     {}", style::value("3. 使用多个字典组合"));
+            } else {
                 println!("  💡 {}", style::warning("内嵌字典与数字穷举均未破解成功"));
                 println!("     {}", style::value("请使用 --dictionary 参数指定一个更大的字典文件:"));
                 println!("     {}", style::highlight(&format!(
                     "     {} --dictionary <FILE>",
                     std::env::args().next().unwrap_or_else(|| "rar-cracker".into())
                 )));
-            } else {
-                println!("  💡 {}", style::warning("建议: 尝试以下方法"));
-                println!("     {}", style::value("1. 使用更大的字典文件"));
-                println!("     {}", style::value("2. 增加密码长度范围"));
-                println!("     {}", style::value("3. 使用混合字符集字典"));
             }
         }
     }
