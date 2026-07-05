@@ -10,3 +10,13 @@ rayon = "1"
 unrar = "0.5"
 walkdir = "2"
 colored = "3"
+
+[profile.release]
+# 去除符号表，减小体积
+strip = true
+# 全程序链接时优化（最激进）
+lto = "fat"
+# 合并为单个代码生成单元，优化更充分
+codegen-units = 1
+# 优化级别：z=最小体积，s=更小但更保守
+opt-level = "s"
